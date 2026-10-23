@@ -85,10 +85,12 @@ description: 麦门券力透视 —— 校验麦当劳优惠券在「具体门�
 
 ## 附带脚本
 
-`scripts/xray.py` 提供三个纯函数（无网络、无副作用），用于把工具返回的原始 JSON 转成上表：
+`scripts/xray.py` 提供五个纯函数（无网络、无副作用），用于把工具返回的原始 JSON 转成上表：
 
 - `dedupe_coupons(raw)` —— 按券名去重，返回 `(去重后列表, 原始条目数, 重复条目数)`
 - `group_by_coupon_id(rows)` —— 同 `couponId` 多 `couponCode` 归并
 - `build_matrix(stores, store_coupons_map)` —— 生成跨店可用性矩阵
+- `rank_stores(stores, pricing)` —— 按券后实付升序，同价按省钱额降序，`after` 缺失排最后
+- `sort_stores_by_distance(stores)` —— 按 `distance`（米）升序，缺失距离的门店排最后
 
 用法：`python scripts/xray.py --selftest` 跑内置用例。

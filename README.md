@@ -141,10 +141,12 @@ mcd-coupon-xray/
 ├── MCP_INTEGRATION.md          逐工具的调用链、参数、实测返回与业务价值
 ├── mcp-config.example.json     脱敏配置模板（仅环境变量占位符）
 ├── workbuddy.md                WorkBuddy 开发过程对话上下文
+├── LICENSE                     MIT
+├── .gitignore                  挡住本地配置与凭据
 ├── scripts/
-│   └── xray.py                 去重 / 归并 / 矩阵生成（纯函数，无网络）
+│   └── xray.py                 去重 / 归并 / 矩阵 / 排序（纯函数，无网络）
 └── tests/
-    └── test_xray.py            针对三个纯函数的单元测试
+    └── test_xray.py            18 个单元测试，覆盖上述五个纯函数
 ```
 
 ## 边界
