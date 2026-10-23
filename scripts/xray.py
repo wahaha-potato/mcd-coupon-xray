@@ -4,11 +4,19 @@
 本模块不发任何网络请求、不读写文件、不依赖 MCP 连接，可独立单测。
 
 设计约束（来自真实实测，见 MCP_INTEGRATION.md）：
-1. available-coupons 的条目数 != 券数量，同一券名可能多条，图片域名不同。
-   -> 去重必须按券名，不能按 URL、也不能按条数统计。
-2. query-store-coupons 同一 couponId 可对应多个 couponCode。
-   -> 统计张数按 couponCode 计，展示按 couponId 分组。
-3. 门店 longitude / latitude 恒为 0.0，只有 distance 有效。
+1. 「一张券」的唯一标识是 couponId，不是券名。
+   同名券可能是两个不同活动（不同 couponId），各有真实券码。
+   实测：auto-bind-coupons 领取 5 条记录 -> 5 个不同 couponId -> 5 张真实券。
+   按券名去重会把两张真券合并成一张，是数据丢失，不是展示优化。
+2. available-coupons 的返回不含 couponId，此时只能按券名做展示归并，
+   计数必须等 auto-bind-coupons 返回后按 couponId 统计。
+3. 领取成功 != 进入卡包。实测领 5 张，query-my-coupons 只见 4 张。
+4. 进入卡包 != 今日可核销。实测卡包 4 张中 2 张有效期从 10-26 开始，今日不可用。
+   query-store-coupons 返回的才是当前门店、当前时间真正能用的。
+5. 菜单编码空间与计价编码空间不一致。实测券的适用商品 9900016534
+   不在 query-meals 返回中，但 calculate-price 照常算出 23.8 -> 19.9。
+   不能用菜单是否存在来判断券可不可用，应直接调 calculate-price。
+6. 门店 longitude / latitude 恒为 0.0，只有 distance 有效。
    -> 排序一律用 distance。
 """
 
@@ -25,27 +33,42 @@ __all__ = [
 ]
 
 
-def dedupe_coupons(raw: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], int, int]:
-    """按券名归并可领券列表。
+def dedupe_coupons(
+    raw: Sequence[Mapping[str, Any]], key: str = "couponId"
+) -> tuple[list[dict[str, Any]], int, int]:
+    """按 key 归并券记录，返回真实张数。
 
     Args:
-        raw: available-coupons 的原始条目，每项至少含 ``title``。
+        raw: 券记录列表。auto-bind-coupons 的返回含 ``couponId``，
+            available-coupons 的返回不含（只有 ``title`` / 图片 / 状态）。
+        key: 去重键。默认 ``couponId``（计数口径）；仅做展示归并时可传 ``title``。
 
     Returns:
         ``(去重后的券列表, 原始条目数, 被合并掉的重复条目数)``
 
     Raises:
-        ValueError: 条目缺少 ``title`` 或 ``title`` 为空。
+        ValueError: 条目缺少去重键。计数口径下缺 ``couponId`` 时会显式报错，
+            提醒调用方改用 ``key="title"`` 做展示归并，而不是静默给出错误张数。
     """
     merged: dict[str, dict[str, Any]] = {}
     for idx, item in enumerate(raw):
-        title = (item.get("title") or "").strip()
-        if not title:
-            raise ValueError(f"第 {idx} 条记录缺少 title，无法按券名归并")
-        if title in merged:
-            merged[title]["occurrences"] += 1
+        value = (item.get(key) or "").strip()
+        if not value:
+            if key == "couponId":
+                raise ValueError(
+                    f"第 {idx} 条记录缺少 couponId，无法按券计数。"
+                    "available-coupons 的返回不含 couponId，此时只能传 key='title' 做展示归并；"
+                    "真实张数必须等 auto-bind-coupons 返回后按 couponId 统计。"
+                )
+            raise ValueError(f"第 {idx} 条记录缺少 {key}，无法归并")
+        if value in merged:
+            merged[value]["occurrences"] += 1
             continue
-        merged[title] = {"title": title, "occurrences": 1}
+        merged[value] = {
+            key: value,
+            "title": (item.get("title") or "").strip(),
+            "occurrences": 1,
+        }
 
     coupons = list(merged.values())
     total = len(raw)

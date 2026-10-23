@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>麦门券力透视 · 麦当劳优惠券可核销性校验</title>
+<style>
+  :root{
+    --bg:#faf9f6; --card:#ffffff; --ink:#1f2430; --sub:#5b6472;
+    --line:#e8e5de; --accent:#ffc72c; --accent-ink:#8a6d00;
+    --red:#c8102e; --green:#1a7f4f; --warn:#b3541e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;padding:32px 16px}
+  .wrap{max-width:920px;margin:0 auto}
+  header{margin-bottom:28px}
+  h1{font-size:30px;letter-spacing:.5px;display:flex;align-items:center;gap:12px}
+  h1 .tag{font-size:12px;font-weight:600;background:var(--accent);color:var(--accent-ink);padding:3px 10px;border-radius:999px;white-space:nowrap}
+  .lead{color:var(--sub);margin-top:10px;font-size:16px}
+  .lead b{color:var(--ink)}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin-bottom:20px}
+  h2{font-size:17px;margin-bottom:4px}
+  .hint{color:var(--sub);font-size:13px;margin-bottom:18px}
+  /* 漏斗 */
+  .funnel{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap}
+  .stage{flex:1 1 150px;min-width:140px;border:1px solid var(--line);border-radius:12px;padding:16px 14px;text-align:center;position:relative}
+  .stage .num{font-size:40px;font-weight:700;line-height:1.15}
+  .stage .lbl{font-size:13px;color:var(--sub);margin-top:2px}
+  .stage .tool{font-size:11px;color:#9aa2ae;margin-top:6px;font-family:ui-monospace,Consolas,monospace}
+  .stage.lost{border-color:#f2d4d4;background:#fdf7f7}
+  .stage.lost .num{color:var(--red)}
+  .arrow{align-self:center;color:#c3b98f;font-size:20px;padding:0 2px}
+  .loss{margin-top:14px;font-size:13.5px;color:var(--warn);background:#fdf6ef;border:1px solid #f0e2cf;border-radius:10px;padding:10px 14px}
+  .loss b{color:var(--red)}
+  /* 表格 */
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+  th,td{padding:10px 10px;border-bottom:1px solid var(--line);text-align:left}
+  th{font-size:12.5px;color:var(--sub);font-weight:600;background:#f6f4ef}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .save{color:var(--green);font-weight:700}
+  .code{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#7a6a2f;background:#fdf8e7;border:1px solid #efe6c0;border-radius:6px;padding:1px 6px}
+  .pill{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;margin-right:6px}
+  .pill.ok{background:#e8f4ec;color:var(--green);border:1px solid #cfe6d7}
+  .pill.no{background:#f7ecec;color:var(--red);border:1px solid #eed3d3}
+  /* 卡片 */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+  .fact{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .fact h3{font-size:14.5px;margin-bottom:6px}
+  .fact p{font-size:13.5px;color:var(--sub)}
+  .fact p code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#f4f2ec;border-radius:5px;padding:1px 5px}
+  footer{color:#9aa2ae;font-size:12.5px;text-align:center;margin-top:26px;line-height:1.9}
+  footer a{color:#7a6a2f}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>麦门券力透视 <span class="tag">真实数据 · 全链路实测</span></h1>
+    <p class="lead">麦麦省的券谁都能领，但<b>领了不等于楼下那家店认</b>。本页所有数字来自 2026-10-23 用真实麦当劳 MCP 账号跑完的整条链路，无一处虚构。</p>
+  </header>
+
+  <section>
+    <h2>一张券要过三道门</h2>
+    <p class="hint">同一天、同一账号、北京三里屯 5 家门店的实测漏斗。每过一道门都会安静地少一部分，接口不会主动提示。</p>
+    <div class="funnel">
+      <div class="stage"><div class="num">5</div><div class="lbl">可领记录</div><div class="tool">available-coupons</div></div>
+      <div class="arrow">→</div>
+      <div class="stage"><div class="num">5</div><div class="lbl">实际领取（5 个 couponId）</div><div class="tool">auto-bind-coupons</div></div>
+      <div class="arrow">→</div>
+      <div class="stage lost"><div class="num">4</div><div class="lbl">进入卡包</div><div class="tool">query-my-coupons</div></div>
+      <div class="arrow">→</div>
+      <div class="stage lost"><div class="num">2</div><div class="lbl">当天可核销</div><div class="tool">query-store-coupons</div></div>
+    </div>
+    <div class="loss">
+      两处静默损耗：<b>免费脆薯饼</b>领取成功却没进卡包（接口不给原因）；另外 2 张券有效期从 10-26 才开始，当天核销不了。
+    </div>
+  </section>
+
+  <section>
+    <h2>券后实付（calculate-price 真实返回）</h2>
+    <p class="hint">金额单位为分，展示时 ÷100。取餐方式返回堂食 / 外带两种。</p>
+    <table>
+      <tr><th>商品</th><th>productCode</th><th class="num">券前</th><th class="num">券后</th><th class="num">省</th><th>状态</th></tr>
+      <tr>
+        <td>麦辣鸡腿汉堡</td>
+        <td><span class="code">1440</span></td>
+        <td class="num">22.5 元</td>
+        <td class="num"><b>11.9 元</b></td>
+        <td class="num save">10.6 元</td>
+        <td><span class="pill ok">可核销</span></td>
+      </tr>
+      <tr>
+        <td>王牌炸鸡任选 2</td>
+        <td><span class="code">9900016534</span></td>
+        <td class="num">23.8 元</td>
+        <td class="num"><b>19.9 元</b></td>
+        <td class="num save">3.9 元</td>
+        <td><span class="pill ok">可核销</span></td>
+      </tr>
+      <tr>
+        <td>免费脆薯饼</td>
+        <td>—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td><span class="pill no">领取成功但未进卡包</span></td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>逐店校验：同一批券，5 家门店都认</h2>
+    <p class="hint">北京三里屯周边 5 家门店的 query-store-coupons 返回完全一致——这两张是通用券。矩阵的价值要在有门店限制的券上才显现，但校验逻辑必须先在。</p>
+    <table>
+      <tr><th>门店</th><th class="num">距离</th><th>storeCode</th><th class="num">当天可用券</th></tr>
+      <tr><td>麦当劳北京长虹桥餐厅</td><td class="num">628 m</td><td><span class="code">1951066</span></td><td class="num">2</td></tr>
+      <tr><td>麦当劳北京团结湖餐厅</td><td class="num">933 m</td><td><span class="code">1950050</span></td><td class="num">2</td></tr>
+      <tr><td>麦当劳北京吉市口东路（佳汇中心）餐厅</td><td class="num">1351 m</td><td><span class="code">1951027</span></td><td class="num">2</td></tr>
+      <tr><td>麦当劳北京工体北路餐厅</td><td class="num">1355 m</td><td><span class="code">1950085</span></td><td class="num">2</td></tr>
+      <tr><td>麦当劳北京东大桥餐厅</td><td class="num">1397 m</td><td><span class="code">1950006</span></td><td class="num">2</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>四个接口不会告诉你的事实</h2>
+    <div class="grid">
+      <div class="fact">
+        <h3>「一张券」的唯一标识是 couponId，不是券名</h3>
+        <p>领取返回 5 条记录 = <b>5 张券</b>、5 个不同 couponId。「11.9 元麦辣鸡腿堡」出现两次是两个不同活动（一批 10-23 截止、一批 10-26 开始）。按券名去重会把两张真券合并成一张。</p>
+      </div>
+      <div class="fact">
+        <h3>菜单编码 ≠ 计价编码</h3>
+        <p>券的适用商品 <code>9900016534</code> 不在 query-meals 菜单里，但 calculate-price 照常算出 23.8 → 19.9 元。不能用菜单存在性判断券可不可用。</p>
+      </div>
+      <div class="fact">
+        <h3>卡包为空时，按门店查必为空</h3>
+        <p>query-store-coupons 是「已持有 ∩ 该店可核销」，不是「该店全部可用券」。空卡包 + 有效门店 <code>1951066</code> → 返回 <code>[]</code>。必须先领券再查门店。</p>
+      </div>
+      <div class="fact">
+        <h3>门店经纬度是废的</h3>
+        <p>5 家店全部返回 <code>longitude: 0.0</code>、<code>latitude: 0.0</code>，唯一有效的是 distance（米）。想拿坐标画地图的写法都会失败。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    数据采集：2026-10-23 10:24 – 11:03（北京时间）· 麦当劳中国 MCP Server <code>mcp.mcd.cn</code> · 9 个 Tool 全链路实测<br>
+    本页为非官方技术演示，价格与券状态以麦当劳官方渠道实时结果为准 ·
+    <a href="https://github.com/wahaha-potato/mcd-coupon-xray">GitHub 仓库</a>
+  </footer>
+
+</div>
+</body>
+</html>

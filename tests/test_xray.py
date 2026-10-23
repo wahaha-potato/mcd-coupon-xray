@@ -18,44 +18,89 @@ import xray  # noqa: E402
 
 # ---------- dedupe_coupons ----------
 
-def test_dedupe_real_sample_five_to_three():
-    """真实样本：available-coupons 返回 5 条，实际 3 张券。"""
+def test_dedupe_real_auto_bind_sample_five_coupons():
+    """真实样本：auto-bind-coupons 领取 5 条记录，5 个不同 couponId，即 5 张真实券。
+
+    这推翻了早期「按券名去重得 3 张」的结论：同名券是两个不同活动
+    （一批有效期到 10-23、一批从 10-26 开始），各有真实券码。
+    """
     raw = [
-        {"title": "11.9元麦辣鸡腿堡", "img": "https://img.mcd.cn/cms/images/289fd13e1138b66b.png"},
-        {"title": "19.9元王牌炸鸡任选2", "img": "https://img.mcd.cn/cms/images/edc67c7e8284bc71.png"},
-        {"title": "免费脆薯饼", "img": "https://img.mcd.cn/cms/images/858839306b7cca66.png"},
-        {"title": "11.9元麦辣鸡腿堡", "img": "https://cos.example.com/a.png?sign=1"},
-        {"title": "19.9元王牌炸鸡任选2", "img": "https://cos.example.com/b.png?sign=2"},
+        {"title": "11.9元麦辣鸡腿堡", "couponId": "A255280326E3328D179C362B7B8DDA65",
+         "couponCode": "MCD60810900B7B5V04022"},
+        {"title": "19.9元王牌炸鸡任选2", "couponId": "44928824D2D4273FE5ECA617BBF75483",
+         "couponCode": "MCD6C9B100040402V0258"},
+        {"title": "11.9元麦辣鸡腿堡", "couponId": "B34E5EC6710BEEECEC8B25C742D3F119",
+         "couponCode": "MCD696B00V028E0418250"},
+        {"title": "19.9元王牌炸鸡任选2", "couponId": "A03BC156F97B8937213963D7632F3338",
+         "couponCode": "MCD6092770001B84220VF"},
+        {"title": "免费脆薯饼", "couponId": "0D94B7923332F58026539DB8CCA81275",
+         "couponCode": "MCD60V02702G492080B19"},
     ]
     coupons, total, duplicated = xray.dedupe_coupons(raw)
 
-    assert len(coupons) == 3
-    assert total == 5
-    assert duplicated == 2
+    assert (len(coupons), total, duplicated) == (5, 5, 0)
+    assert len({c["couponId"] for c in coupons}) == 5
+    titles = [c["title"] for c in coupons]
+    assert titles.count("11.9元麦辣鸡腿堡") == 2, "同名券是两个活动，不能合并"
+    assert titles.count("19.9元王牌炸鸡任选2") == 2
+
+
+def test_dedupe_same_coupon_id_merges():
+    """同一 couponId 出现两次才算重复（例如 query-store-coupons 的多券码场景）。"""
+    raw = [
+        {"title": "免费脆薯饼", "couponId": "C1", "couponCode": "A1"},
+        {"title": "免费脆薯饼", "couponId": "C1", "couponCode": "A2"},
+        {"title": "麦辣鸡腿汉堡", "couponId": "C2", "couponCode": "B1"},
+    ]
+    coupons, total, duplicated = xray.dedupe_coupons(raw)
+
+    assert (len(coupons), total, duplicated) == (2, 3, 1)
+    by_id = {c["couponId"]: c for c in coupons}
+    assert by_id["C1"]["occurrences"] == 2
+    assert by_id["C1"]["is_duplicated"] is True
+    assert by_id["C2"]["is_duplicated"] is False
+
+
+def test_dedupe_by_title_is_display_only():
+    """available-coupons 的返回不含 couponId，只能传 key='title' 做展示归并。
+
+    返回的 3 不等于真实张数——真实张数必须等 auto-bind 返回后按 couponId 统计。
+    """
+    raw = [
+        {"title": "11.9元麦辣鸡腿堡", "img": "https://img.mcd.cn/a.png"},
+        {"title": "19.9元王牌炸鸡任选2", "img": "https://img.mcd.cn/b.png"},
+        {"title": "免费脆薯饼", "img": "https://img.mcd.cn/c.png"},
+        {"title": "11.9元麦辣鸡腿堡", "img": "https://cos.example.com/a.png?sign=1"},
+        {"title": "19.9元王牌炸鸡任选2", "img": "https://cos.example.com/b.png?sign=2"},
+    ]
+    coupons, total, duplicated = xray.dedupe_coupons(raw, key="title")
+
+    assert (len(coupons), total, duplicated) == (3, 5, 2)
     assert [c["title"] for c in coupons] == ["11.9元麦辣鸡腿堡", "19.9元王牌炸鸡任选2", "免费脆薯饼"]
 
 
-def test_dedupe_marks_duplicated_flag():
-    coupons, _, _ = xray.dedupe_coupons(
-        [{"title": "A"}, {"title": "A"}, {"title": "B"}]
-    )
-    by_title = {c["title"]: c for c in coupons}
-    assert by_title["A"]["is_duplicated"] is True
-    assert by_title["A"]["occurrences"] == 2
-    assert by_title["B"]["is_duplicated"] is False
+def test_dedupe_default_key_rejects_records_without_coupon_id():
+    """available-coupons 样本直接按默认键计数必须报错，而不是静默给出错误张数。"""
+    raw = [{"title": "11.9元麦辣鸡腿堡", "img": "https://img.mcd.cn/a.png"}]
+    try:
+        xray.dedupe_coupons(raw)
+    except ValueError as exc:
+        assert "available-coupons" in str(exc), "报错信息应指明正确的替代口径"
+        return
+    raise AssertionError("缺 couponId 时未抛 ValueError")
 
 
 def test_dedupe_empty_input():
     assert xray.dedupe_coupons([]) == ([], 0, 0)
 
 
-def test_dedupe_rejects_missing_title():
-    """缺 title 必须抛错：静默跳过会让「券张数」这个核心指标失真。"""
-    try:
-        xray.dedupe_coupons([{"img": "https://img.mcd.cn/x.png"}])
-    except ValueError:
-        return
-    raise AssertionError("缺少 title 时未抛 ValueError")
+def test_dedupe_missing_key_field_raises():
+    for bad in ([{"title": "无ID"}], [{"couponId": "", "title": "空ID"}]):
+        try:
+            xray.dedupe_coupons(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"缺 couponId 时未抛 ValueError: {bad}")
 
 
 # ---------- group_by_coupon_id ----------
