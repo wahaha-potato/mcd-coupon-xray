@@ -1,0 +1,17 @@
+# 本地凭据与私密配置，严禁提交
+mcp-config.json
+.env
+.env.*
+*.token
+token.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# 系统
+.DS_Store
+Thumbs.db
